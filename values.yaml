@@ -1,0 +1,385 @@
+﻿# ==========================================================================
+# CAST Imaging MCP Server Helm Chart - Default Values
+# ==========================================================================
+# This file contains default configuration values for the CAST Imaging MCP Server.
+# These values can be overridden in environment-specific values files.
+
+# ==========================================================================
+# GLOBAL SETTINGS
+# ==========================================================================
+# Global settings that affect the entire chart and can be inherited by subcharts
+global:
+  imageRegistry: ""           # Override default image registry (e.g., "my-registry.com")
+  imagePullSecrets: []        # Global image pull secrets for private registries
+  storageClass: ""            # Global storage class for all PVCs
+
+# ==========================================================================
+# APPLICATION CONFIGURATION
+# ==========================================================================
+# Basic application metadata and versioning
+app:
+  name: cast-imaging-mcp-server    # Application name used in labels
+  version: "3.4.3"                # Application version for tracking
+
+# ==========================================================================
+# CONTAINER IMAGE CONFIGURATION
+# ==========================================================================
+# Docker image settings for the CAST Imaging MCP Server container
+image:
+  registry: docker.io                           # Docker registry hostname
+  repository: castimaging/imaging-mcp-server    # Image repository path
+  tag: "3.4.3"                                 # Image tag (version)
+  pullPolicy: IfNotPresent                      # Image pull policy (Always, IfNotPresent, Never)
+  pullSecrets: []                               # Image pull secrets for private registries
+
+# ==========================================================================
+# CONTAINER EXECUTION CONFIGURATION
+# ==========================================================================
+# Command and arguments for container startup
+command:                          # Override default container entrypoint
+  - /app/init.sh                 # Default startup script
+
+args: []                          # Additional arguments passed to the command
+
+# ==========================================================================
+# SECURITY CONTEXT CONFIGURATION
+# ==========================================================================
+# Security settings for pods and containers
+
+# Pod-level security context (applies to all containers in the pod)
+podSecurityContext:
+  fsGroup: 1000                   # File system group ID for volume ownership
+  runAsUser: 1000                 # User ID to run containers
+  runAsGroup: 1000                # Group ID to run containers
+  runAsNonRoot: true              # Prevent running as root user
+
+# Container-level security context
+securityContext:
+  allowPrivilegeEscalation: false # Prevent privilege escalation
+  runAsNonRoot: true              # Enforce non-root execution
+  runAsUser: 1000                 # User ID for this container
+  capabilities:
+    drop:
+    - ALL                         # Drop all capabilities for security
+
+# ==========================================================================
+# DEPLOYMENT CONFIGURATION
+# ==========================================================================
+# Kubernetes deployment settings
+replicaCount: 1                   # Number of pod replicas to run
+
+# ==========================================================================
+# SERVICE CONFIGURATION
+# ==========================================================================
+# Kubernetes service for exposing the application
+service:
+  type: ClusterIP                 # Service type (ClusterIP, NodePort, LoadBalancer)
+  port: 80                        # Service port exposed to other services
+  targetPort: 8282                # Container port that receives traffic
+  annotations: {}                 # Service annotations (e.g., for load balancers)
+
+# ==========================================================================
+# INGRESS CONFIGURATION
+# ==========================================================================
+# HTTP/HTTPS ingress for external access (disabled by default)
+ingress:
+  enabled: false                  # Enable/disable ingress creation
+  className: ""                   # Ingress class name (e.g., "nginx", "traefik")
+  annotations: {}                 # Ingress annotations for configuration
+  hosts:                          # List of hosts that will route to this service
+    - host: chart-example.local   # Example hostname
+      paths:
+        - path: /                 # URL path
+          pathType: Prefix        # Path matching type
+  tls: []                         # TLS configuration for HTTPS
+
+# ==========================================================================
+# RESOURCE MANAGEMENT
+# ==========================================================================
+# CPU and memory resource limits and requests
+resources:
+  limits:                         # Maximum resources the container can use
+    cpu: 1000m                    # 1 CPU core limit
+    memory: 2Gi                   # 2GB memory limit
+  requests:                       # Resources guaranteed to the container
+    cpu: 100m                     # 0.1 CPU core request
+    memory: 256Mi                 # 256MB memory request
+
+# ==========================================================================
+# NODE SCHEDULING CONFIGURATION
+# ==========================================================================
+# Control which nodes pods can be scheduled on
+nodeSelector: {}                  # Node selector constraints (e.g., {"disktype": "ssd"})
+
+# Tolerations for nodes with taints
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+tolerations: []                     # Tolerations for scheduling on tainted nodes
+
+# Pod affinity and anti-affinity rules
+affinity: {}                      # Node affinity, pod affinity/anti-affinity rules
+
+# ==========================================================================
+# AUTOSCALING CONFIGURATION
+# ==========================================================================
+# Horizontal Pod Autoscaler for automatic scaling
+autoscaling:
+  enabled: false                  # Enable/disable autoscaling
+  minReplicas: 1                  # Minimum number of replicas
+  maxReplicas: 100                # Maximum number of replicas
+  targetCPUUtilizationPercentage: 80  # Target CPU utilization for scaling
+
+# ==========================================================================
+# NETWORK POLICY CONFIGURATION
+# ==========================================================================
+# Network policies for traffic control and security
+networkPolicy:
+  enabled: false                  # Enable/disable network policies
+  ingress: []                     # Ingress traffic rules
+  egress: []                      # Egress traffic rules
+
+# ==========================================================================
+# PERSISTENT STORAGE CONFIGURATION
+# ==========================================================================
+# Consolidated persistent storage for logs and data
+persistence:
+  enabled: true                   # Enable/disable persistent storage
+  accessMode: ReadWriteOnce       # Volume access mode
+  size: 2Gi                       # Storage size for all data
+  storageClass: "standard-rwo"    # Storage class for dynamic provisioning
+
+# ==========================================================================
+# CONFIGURATION MANAGEMENT
+# ==========================================================================
+# ConfigMap settings for application configuration
+config:
+  # MCP Server configuration
+  server:
+    port: 8282                    # Port the MCP server listens on
+    host: "0.0.0.0"               # Host interface to bind to
+    
+  # CAST Imaging configuration  
+  imaging:
+    apiUrl: ""                    # CAST Imaging API base URL
+    apiKey: ""                    # API key for authentication
+    pageSize: 1000                # Default page size for API calls
+    displayPageSize: 20           # Page size for display purposes
+    code: "False"                 # Enable/disable code analysis features
+    
+  # Logging configuration
+  logging:
+    level: "INFO"                 # Log level (DEBUG, INFO, WARN, ERROR)
+    format: "json"                # Log format (json, text)
+
+# Secret configuration
+secrets:
+  # Enable creation of secret for sensitive data
+  create: true
+  # Name of existing secret to use (if create is false)
+  existingSecret: ""
+  
+# Environment variables
+env: []
+
+# Additional environment variables from ConfigMap
+envFrom: []
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8282
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8282
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8282
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+# Additional volumes
+extraVolumes:
+  - name: app-logs
+    emptyDir: {}
+  - name: app-config
+    configMap:
+      name: "{{ .Release.Name }}-config"
+
+# Additional volume mounts
+extraVolumeMounts:
+  - name: app-logs
+    mountPath: /app
+  - name: app-config
+    mountPath: /app/server/config/app.config
+    subPath: app.config
+
+# ==========================================================================
+# HEALTH CHECKS CONFIGURATION
+# ==========================================================================
+# Kubernetes health check probes for container lifecycle management
+
+# Liveness probe - determines if container is healthy and running
+livenessProbe:
+  httpGet:
+    path: /health                 # Health check endpoint
+    port: 8282                    # Port to check
+  initialDelaySeconds: 30         # Wait before first check
+  periodSeconds: 10               # Check interval
+  timeoutSeconds: 5               # Timeout for each check
+  failureThreshold: 3             # Failed checks before restart
+
+# Readiness probe - determines if container is ready to serve traffic
+readinessProbe:
+  httpGet:
+    path: /ready                  # Readiness check endpoint
+    port: 8282                    # Port to check
+  initialDelaySeconds: 5          # Wait before first check
+  periodSeconds: 5                # Check interval
+  timeoutSeconds: 3               # Timeout for each check
+  failureThreshold: 3             # Failed checks before marking unready
+
+# Startup probe - handles slow-starting containers
+startupProbe:
+  httpGet:
+    path: /health                 # Startup check endpoint
+    port: 8282                    # Port to check
+  initialDelaySeconds: 10         # Wait before first check
+  periodSeconds: 10               # Check interval
+  timeoutSeconds: 5               # Timeout for each check
+  failureThreshold: 30            # Maximum startup time (300s)
+
+# ==========================================================================
+# ENVIRONMENT VARIABLES
+# ==========================================================================
+# Environment variables passed to the container
+env: []                           # List of environment variables
+
+# Additional environment variables from ConfigMap
+envFrom: []                       # Environment variables from ConfigMaps/Secrets
+
+# ==========================================================================
+# EXTENSIBILITY CONFIGURATION
+# ==========================================================================
+# Additional resources for customization
+
+# Additional volumes to mount in the pod
+extraVolumes: []                  # Custom volumes (emptyDir, hostPath, etc.)
+
+# Additional volume mounts in the container
+extraVolumeMounts: []             # Custom volume mounts
+
+# Additional containers in the pod
+extraContainers: []               # Sidecar containers
+
+# ==========================================================================
+# CLOUD PROVIDER CONFIGURATION
+# ==========================================================================
+# Cloud-specific settings and integrations
+cloudProvider: "generic"         # Options: aws, gcp, azure, generic
+
+# AWS specific configuration
+aws:
+  region: "us-west-2"             # AWS region
+  loadBalancerController:         # AWS Load Balancer Controller integration
+    enabled: false                # Enable AWS ALB/NLB features
+  
+# GCP specific configuration  
+gcp:
+  project: ""                     # GCP project ID
+  region: "us-central1"           # GCP region
+  
+# Azure specific configuration
+azure:
+  resourceGroup: ""               # Azure resource group
+  region: "eastus"                # Azure region
+
+# ==========================================================================
+# NGINX SIDECAR CONFIGURATION
+# ==========================================================================
+# NGINX sidecar for HTTPS termination and reverse proxy
+nginx:
+  enabled: false                  # Enable NGINX sidecar
+  image:
+    repository: nginx             # NGINX image repository
+    tag: "1.21-alpine"            # NGINX image tag
+    pullPolicy: IfNotPresent      # Image pull policy
+  port: 443                       # HTTPS port
+
+# ==========================================================================
+# TLS/SSL CONFIGURATION
+# ==========================================================================
+# SSL/TLS certificate configuration
+tls:
+  enabled: false                  # Enable TLS/SSL
+  secretName: "cast-imaging-mcp-tls"  # Kubernetes secret with certificates
+  crt: ""                         # TLS certificate (if not using secret)
+  key: ""                         # TLS private key (if not using secret)
+
+# ==========================================================================
+# ISTIO SERVICE MESH CONFIGURATION
+# ==========================================================================
+# Istio service mesh integration for advanced traffic management
+istio:
+  enabled: false                  # Enable Istio integration
+  virtualService:                 # Istio VirtualService configuration
+    enabled: false                # Create VirtualService
+    hosts: []                     # List of hosts
+    gateways: []                  # List of gateways
+    http: []                      # HTTP routing rules
+  destinationRule:                # Istio DestinationRule configuration
+    enabled: false                # Create DestinationRule
+    trafficPolicy: {}             # Traffic policy settings
+
+# ==========================================================================
+# POD CUSTOMIZATION
+# ==========================================================================
+# Pod-level customization options
+
+# Pod annotations for metadata
+podAnnotations: {}                # Custom annotations for pods
+
+# Pod labels for identification
+podLabels: {}                     # Custom labels for pods
+
+# ==========================================================================
+# DEPLOYMENT STRATEGY
+# ==========================================================================
+# Kubernetes deployment update strategy
+strategy:
+  type: RollingUpdate             # Deployment strategy type
+  rollingUpdate:                  # Rolling update configuration
+    maxUnavailable: 1             # Max unavailable pods during update
+    maxSurge: 1                   # Max additional pods during update
+
+# ==========================================================================
+# INITIALIZATION
+# ==========================================================================
+# Init containers for setup tasks before main container starts
+initContainers: []                # List of init containers

@@ -1,0 +1,50 @@
+# ==========================================================================
+# CAST Imaging MCP Server Helm Chart
+# ==========================================================================
+# This Helm chart deploys the CAST Imaging MCP (Model Context Protocol) Server.
+# The server integrates with CAST Imaging platform to expose CAST Imaging Insights.
+#
+# Key Features:
+# - FastMCP server implementation
+# - Integration with CAST Imaging APIs
+# - Persistent storage for logs and data
+# - Configurable for multiple cloud providers
+# ==========================================================================
+
+apiVersion: v2                                    # Helm Chart API version
+name: cast-imaging-mcp-server                     # Chart name used for releases
+description: A Helm chart for CAST Imaging MCP Server deployment on Kubernetes
+
+# Chart type - 'application' means this deploys an application
+type: application                                 
+
+# Chart version - increment when making changes to the chart
+version: 1.1.0                                   
+
+# Application version - the version of CAST Imaging MCP Server being deployed
+appVersion: "3.4.3"                              
+
+# Keywords for chart discovery and categorization
+keywords:
+  - cast                    # CAST Software
+  - imaging                 # CAST Imaging platform
+  - mcp                     # Model Context Protocol
+  - model-context-protocol  # Full protocol name
+  - ai                      # AI/Machine Learning category
+
+# Project homepage
+home: https://www.castsoftware.com/
+
+# Source code repositories
+sources:
+  - https://hub.docker.com/r/castimaging/imaging-mcp-server
+
+# Chart maintainer information
+maintainers:
+  - name: CAST Software
+    email: support@castsoftware.com
+
+# Chart category annotations for Helm repository indexing
+annotations:
+  category: AI/ML
+  licenses: Commercial

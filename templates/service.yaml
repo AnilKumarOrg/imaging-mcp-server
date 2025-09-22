@@ -1,0 +1,48 @@
+{{/*
+==========================================================================
+CAST Imaging MCP Server - Kubernetes Service Template
+==========================================================================
+This template creates a Kubernetes Service to expose the CAST Imaging MCP Server.
+The Service provides a stable network endpoint for the MCP server pods and 
+enables service discovery within the cluster.
+
+Key Features:
+- ClusterIP type for internal cluster communication
+- Port mapping from service port to container port
+- Label selector to target the correct pods
+- Integration with Istio service mesh (if enabled)
+- Support for multiple service types (ClusterIP, NodePort, LoadBalancer)
+
+Template Variables Used:
+- .Values.service.type: Service type (ClusterIP, NodePort, LoadBalancer)
+- .Values.service.port: Port exposed by the service
+- .Values.service.targetPort: Port on the container (defaults to 8282)
+- .Values.service.annotations: Service annotations for integrations
+
+Service Discovery:
+This service can be accessed within the cluster using:
+- Service name: {{ include "cast-imaging-mcp.fullname" . }}
+- FQDN: {{ include "cast-imaging-mcp.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+- Port: {{ .Values.service.port }}
+==========================================================================
+*/}}
+
+apiVersion: v1                         # Kubernetes API version for Services
+kind: Service                          # Resource type: Service
+metadata:
+  name: {{ include "cast-imaging-mcp.fullname" . }}  # Service name from helper template
+  labels:
+    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}  # Standard labels for identification
+  {{- with .Values.service.annotations }}
+  annotations:                         # Service annotations (e.g., for load balancers, service mesh)
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}     # Service type (ClusterIP, NodePort, LoadBalancer)
+  ports:
+    - port: {{ .Values.service.port }} # Port exposed by the service (external)
+      targetPort: http               # Target port on the container (maps to containerPort named "http")
+      protocol: TCP                  # Network protocol
+      name: http                     # Port name for reference
+  selector:                          # Label selector to identify target pods
+    {{- include "cast-imaging-mcp.selectorLabels" . | nindent 4 }}  # Selects pods with matching labels

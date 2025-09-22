@@ -1,0 +1,21 @@
+{{- if .Values.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cast-imaging-mcp.fullname" . }}-config
+  labels:
+    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}
+data:
+  app.config: |
+    HOST_CONTROL_PANEL="{{ .Values.hostControlPanel | default "host" }}"
+    PORT_CONTROL_PANEL={{ .Values.portControlPanel | default .Values.config.server.port | default 8282 }}
+    IMAGING_PAGE_SIZE={{ .Values.config.imaging.pageSize | default 1000 }}
+    IMAGING_DISPLAY_PAGE_SIZE={{ .Values.config.imaging.displayPageSize | default 20 }}
+    IMAGING_CODE={{ .Values.config.imaging.code | default "False" }}
+    
+    # HTTPS Configuration Control
+    # Accepted values:
+    #   "true"  - Enable HTTPS with nginx SSL proxy (requires certificates)  
+    #   "false" - Use direct HTTP access to mcp-server (no encryption)
+    HTTPS_ENABLED={{ .Values.tls.enabled | default "false" }}
+{{- end }}

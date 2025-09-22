@@ -1,0 +1,145 @@
+{{/*
+==========================================================================
+CAST Imaging MCP Server - Kubernetes Deployment Template
+==========================================================================
+This template creates a Kubernetes Deployment for the CAST Imaging MCP Server.
+A Deployment manages a set of replica pods and ensures they are running and healthy.
+
+Key Features:
+- Rolling updates for zero-downtime deployments
+- Configurable replica count and autoscaling
+- Health checks and restart policies
+- Persistent storage mounting
+- Environment-specific configuration injection
+- Security contexts and resource management
+
+Template Variables Used:
+- .Values.replicaCount: Number of pod replicas
+- .Values.image: Container image configuration
+- .Values.persistence: Storage volume configuration
+- .Values.resources: CPU/memory limits and requests
+- .Values.securityContext: Security settings
+==========================================================================
+*/}}
+
+apiVersion: apps/v1                    # Kubernetes API version for Deployments
+kind: Deployment                       # Resource type: Deployment
+metadata:
+  name: {{ include "cast-imaging-mcp.fullname" . }}  # Deployment name from helper template
+  labels:
+    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}  # Standard labels from helper template
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}  # Number of pods (if autoscaling disabled)
+  {{- end }}
+  selector:                            # Label selector for managing pods
+    matchLabels:
+      {{- include "cast-imaging-mcp.selectorLabels" . | nindent 6 }}  # Pod selection labels
+  template:                            # Pod template specification
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:                     # Custom annotations for pods
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:                          # Labels applied to pods
+        {{- include "cast-imaging-mcp.labels" . | nindent 8 }}  # Standard labels
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}    # Additional custom labels
+        {{- end }}
+    spec:                              # Pod specification
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:                # Secrets for pulling private images
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:                 # Pod-level security context
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.persistence.enabled }}
+      initContainers:                  # Init containers run before main containers
+        - name: storage-init           # Storage initialization container
+          image: busybox:1.35          # Lightweight image for setup tasks
+          command: ['sh', '-c', 'mkdir -p /app/storage/logs /app/storage/data && chmod 755 /app/storage/logs /app/storage/data']  # Create directory structure
+          volumeMounts:
+            - name: app-storage        # Mount the persistent storage volume
+              mountPath: /app/storage  # Mount point for directory creation
+      {{- end }}
+      containers:                      # Main application containers
+        - name: castimaging-mcp-server # Main container name
+          securityContext:             # Container-level security context
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"  # Container image with tag
+          imagePullPolicy: {{ .Values.image.pullPolicy }}  # When to pull the image
+          {{- if .Values.command }}
+          command:                     # Override container entrypoint if specified
+            {{- toYaml .Values.command | nindent 12 }}
+          {{- end }}
+          {{- if .Values.args }}
+          args:                        # Arguments passed to the command
+            {{- toYaml .Values.args | nindent 12 }}
+          {{- end }}
+          ports:                       # Container ports exposed
+            - name: http             # Port name for service reference
+              containerPort: {{ .Values.service.targetPort | default 8282 }}  # MCP server port
+              protocol: TCP          # TCP protocol
+          {{- if .Values.env }}
+          env:                       # Environment variables
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
+          {{- if .Values.envFrom }}
+          envFrom:                   # Environment variables from ConfigMaps/Secrets
+            {{- toYaml .Values.envFrom | nindent 12 }}
+          {{- end }}
+          livenessProbe:             # Health check to determine if container is alive
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:            # Health check to determine if container is ready for traffic
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- if .Values.startupProbe }}
+          startupProbe:              # Health check for slow-starting containers
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          {{- end }}
+          resources:                 # CPU and memory resource limits/requests
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:              # Volumes mounted in the container
+            {{- if .Values.persistence.enabled }}
+            - name: app-storage      # Consolidated storage volume
+              mountPath: /app/storage  # Mount path for storage
+            {{- end }}
+            {{- if .Values.config }}
+            - name: app-config       # Configuration file mount
+              mountPath: /app/server/config/app.config  # Application config file path
+              subPath: app.config    # Specific file from ConfigMap
+            {{- end }}
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}  # Additional custom volume mounts
+            {{- end }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}  # Additional volume mounts from values
+            {{- end }}
+      volumes:                       # Volumes available to the pod
+        {{- if .Values.persistence.enabled }}
+        - name: app-storage          # Consolidated storage volume
+          persistentVolumeClaim:     # References a PVC
+            claimName: {{ include "cast-imaging-mcp.fullname" . }}-storage  # PVC name
+        {{- end }}
+        {{- if .Values.config }}
+        - name: app-config           # Configuration volume
+          configMap:                 # ConfigMap volume source
+            name: {{ include "cast-imaging-mcp.fullname" . }}-config  # ConfigMap name
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}  # Additional custom volumes
+        {{- end }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}  # Additional volumes from values
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:                  # Node selection constraints
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:                      # Pod affinity/anti-affinity rules
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:                   # Tolerations for node taints
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
