@@ -1,0 +1,436 @@
+# ==========================================================================
+# CAST Imaging MCP Server - GCP Environment Configuration
+# ==========================================================================
+# This values file contains GCP-specific configuration for the
+# CAST Imaging MCP Server deployment in Google Kubernetes Engine (GKE).
+#
+# Environment Details:
+# - Cloud Provider: Google Cloud Platform (GCP)
+# - Kubernetes Platform: Google Kubernetes Engine (GKE)
+# - Service Mesh: Istio
+#
+# Key Customizations:
+# - Control Panel service discovery integration
+# - Internal service-to-service communication
+# - GCP-specific storage classes
+# - Security context for enterprise environment
+# - External access via Istio VirtualService
+# ==========================================================================
+
+# ==========================================================================
+# ENVIRONMENT IDENTIFICATION
+# ==========================================================================
+# Override default settings for GCP environment
+cloudProvider: "gcp"              # Specify Google Cloud Platform
+
+fullnameOverride: "imaging-mcp-server"  
+
+# ==========================================================================
+# APPLICATION VERSION CONFIGURATION
+# ==========================================================================
+# Application metadata for this deployment
+app:
+  name: cast-imaging-mcp-server    # Application identifier
+  version: "3.4.3"                # CAST Imaging MCP Server version
+
+# ==========================================================================
+# CONTAINER IMAGE CONFIGURATION
+# ==========================================================================
+# Docker image settings for the CAST Imaging MCP Server
+image:
+  registry: docker.io                           # Docker Hub registry
+  repository: castimaging/imaging-mcp-server    # Official CAST image repository
+  tag: "3.4.3"                                 # Specific version tag
+  pullPolicy: IfNotPresent                      # Optimize for local caching
+
+# ==========================================================================
+# DEPLOYMENT SCALING
+# ==========================================================================
+# Single replica for dev environment
+replicaCount: 1                    # Development/staging typically uses 1 replica
+
+# ==========================================================================
+# SERVICE CONFIGURATION
+# ==========================================================================
+# Kubernetes service configuration to match Istio VirtualService expectations
+service:
+  type: ClusterIP                  # Internal service type
+  port: 8282                       # Port expected by VirtualService
+  targetPort: 8282                 # Container port for MCP server
+  annotations: {}                  # No special service annotations needed
+
+# ==========================================================================
+# RESOURCE ALLOCATION
+# ==========================================================================
+# Resource configuration for GCP environment
+resources:
+  limits:                          # Maximum resources allowed
+    cpu: 1000m                     # 1 CPU core maximum
+    memory: 2Gi                    # 2GB memory maximum
+  requests:                        # Guaranteed resources
+    cpu: 200m                      # 0.2 CPU cores guaranteed
+    memory: 512Mi                  # 512MB memory guaranteed
+
+# ==========================================================================
+# GOOGLE CLOUD PLATFORM CONFIGURATION
+# ==========================================================================
+# GCP specific configuration
+gcp:
+  project: "clgx-gke-cots-us-c1-dev"  # GCP project ID
+  region: "us-central1"                # GCP region for resources
+
+# ==========================================================================
+# ENVIRONMENT CONFIGURATION
+# ==========================================================================
+# Customer environment specific configuration
+environment:
+  name: "corelogic-dev"               # Environment identifier
+  namespace: "platform-services-glb-castaip"  # Kubernetes namespace
+
+# ==========================================================================
+# EXTERNAL ACCESS CONFIGURATION
+# ==========================================================================
+# Istio VirtualService configuration for external access
+virtualService:
+  enabled: true                       # Enable Istio integration
+  hosts:                              # External hostnames
+    - "imaging-mcp-server.cotsusc1dev.solutions.corelogic.com"
+  gateways:                           # Istio gateways to use
+    - "asm-gateways/istio-gateway"
+  http:                               # HTTP routing rules
+    - match:
+        - uri:
+            prefix: "/mcp"
+      route:
+        - destination:
+            host: "imaging-mcp-server"
+            port:
+              number: 8282
+
+# ==========================================================================
+# APPLICATION CONFIGURATION
+# ==========================================================================
+# ConfigMap configuration
+config:
+  # MCP Server configuration
+  server:
+    port: 8282                       # Port for MCP server
+    host: "0.0.0.0"                  # Bind to all interfaces
+    
+  # CAST Imaging configuration  
+  imaging:
+    apiUrl: "https://console-gateway-service.cotsusc1dev.solutions.corelogic.com"  # External API URL
+    pageSize: 1000                   # API pagination size
+    displayPageSize: 20              # UI display page size
+    code: "False"                    # Code analysis features
+    
+  # Logging configuration
+  logging:
+    level: "INFO"                    # Information level logging
+    format: "json"                   # JSON format for log aggregation
+
+# ==========================================================================
+# SERVICE DISCOVERY CONFIGURATION
+# ==========================================================================
+# Host configuration for environment - pointing to internal service
+hostControlPanel: "console-control-panel.platform-services-glb-castaip.svc.cluster.local"  # Internal DNS name
+portControlPanel: 8098               # Control panel service port
+
+# ==========================================================================
+# ENVIRONMENT VARIABLES
+# ==========================================================================
+# Environment variables  
+env:
+  - name: LOG_FILE_PATH              # Configure log file location
+    value: "/app/storage/logs/mcp_img.log"  # Path within persistent volume
+
+# ==========================================================================
+# SECURITY CONTEXT CONFIGURATION
+# ==========================================================================
+# Security context
+podSecurityContext:
+  fsGroup: 0                         # Root group for file system access
+  runAsUser: 0                       # Run as root user (required for log file creation)
+  runAsGroup: 0                      # Root group
+  runAsNonRoot: false                # Allow root execution
+
+securityContext:
+  allowPrivilegeEscalation: false    # Prevent privilege escalation
+  runAsNonRoot: false                # Allow root execution for file permissions
+  runAsUser: 0                       # Root user ID
+  capabilities:
+    drop:
+    - ALL                            # Drop all capabilities for security
+
+# ==========================================================================
+# HEALTH CHECKS CONFIGURATION
+# ==========================================================================
+# Health checks configuration with TCP probes (HTTP probes not available for MCP endpoint)
+livenessProbe:
+  httpGet: null                      # Disable HTTP GET probe
+  tcpSocket:                         # Use TCP socket probe instead
+    port: 8282                       # Check if port is listening
+  initialDelaySeconds: 30            # Wait 30s before first check
+  periodSeconds: 10                  # Check every 10s
+  timeoutSeconds: 5                  # 5s timeout
+  failureThreshold: 3                # 3 failures before restart
+
+readinessProbe:
+  httpGet: null                      # Disable HTTP GET probe
+  tcpSocket:                         # Use TCP socket probe instead
+    port: 8282                       # Check if port is listening
+  initialDelaySeconds: 5             # Wait 5s before first check
+  periodSeconds: 5                   # Check every 5s
+  timeoutSeconds: 3                  # 3s timeout
+  failureThreshold: 3                # 3 failures before marking unready
+
+startupProbe:
+  httpGet: null                      # Disable HTTP GET probe
+  tcpSocket:                         # Use TCP socket probe instead
+    port: 8282                       # Check if port is listening
+  initialDelaySeconds: 10            # Wait 10s before first check
+  periodSeconds: 10                  # Check every 10s
+  timeoutSeconds: 5                  # 5s timeout
+  failureThreshold: 30               # Allow up to 300s for startup
+
+# ==========================================================================
+# NETWORK SECURITY CONFIGURATION
+# ==========================================================================
+
+  enabled: true                      # Enable network policies
+  ingress:                           # Ingress traffic rules
+    - from:
+        - namespaceSelector:         # Allow traffic from Istio namespace
+            matchLabels:
+              name: "istio-system"
+      ports:
+        - protocol: TCP
+          port: 8080                 # HTTP port
+        - protocol: TCP
+          port: 443                  # HTTPS port
+  egress:                            # Egress traffic rules
+    - to: []                         # Allow all outbound traffic
+      ports:
+        - protocol: TCP
+          port: 443                  # HTTPS outbound
+        - protocol: TCP
+          port: 80                   # HTTP outbound
+
+# ==========================================================================
+# HIGH AVAILABILITY CONFIGURATION
+# ==========================================================================
+# Pod disruption budget for availability
+podDisruptionBudget:
+  enabled: true                      # Enable PDB
+  minAvailable: 1                    # Minimum available pods
+
+# ==========================================================================
+# MONITORING AND OBSERVABILITY
+# ==========================================================================
+
+podLabels:
+  environment: "corelogic-dev"       # Environment label
+  team: "platform-services"         # Team ownership
+  
+# Pod annotations for monitoring and service mesh
+podAnnotations:
+  # Prometheus monitoring annotations
+  prometheus.io/scrape: "true"       # Enable Prometheus scraping
+  prometheus.io/port: "8282"         # Port for metrics
+  prometheus.io/path: "/metrics"     # Metrics endpoint path
+
+# ==========================================================================
+# PERSISTENT STORAGE CONFIGURATION
+# ==========================================================================
+persistence:
+  storage:                           # Consolidated storage configuration
+    enabled: true                    # Enable persistent storage
+    accessMode: ReadWriteOnce        # Single node access
+    size: 3Gi                        # Total storage size (was 2Gi logs + 1Gi data)
+    storageClass: "standard-rwo"     # GCP standard persistent disk
+    mountPath: /app/storage          # Mount point in container
+    
+  # Disable separate logs and data PVCs (legacy configuration)
+  logs:
+    enabled: false                   # Disabled in favor of consolidated storage
+    
+  data:
+    enabled: false                   # Disabled in favor of consolidated storage
+
+# ==========================================================================
+# DEPLOYMENT STRATEGY
+# ==========================================================================
+# Deployment strategy for zero-downtime updates
+strategy:
+  type: RollingUpdate                # Rolling update strategy
+  rollingUpdate:
+    maxUnavailable: 0                # No unavailable pods during update
+    maxSurge: 1                      # Allow 1 additional pod during update
+
+# NGINX sidecar enabled for HTTPS termination
+nginx:
+  enabled: true
+  image:
+    repository: nginx
+    tag: "1.21-alpine"
+    pullPolicy: IfNotPresent
+  port: 443
+
+# TLS configuration
+tls:
+  enabled: true
+  secretName: "cast-imaging-mcp-tls"
+
+# Istio service mesh configuration
+istio:
+  enabled: true
+  virtualService:
+    enabled: true
+    hosts:
+      - "console-gateway-service.cotsusc1dev.solutions.corelogic.com"
+    gateways:
+      - "istio-system/gateway-external"
+    http:
+      - match:
+          - uri:
+              prefix: "/mcp"
+        route:
+          - destination:
+              host: "cast-imaging-mcp-server"
+              port:
+                number: 443
+
+# ConfigMap configuration
+config:
+  # MCP Server configuration
+  server:
+    port: 8282
+    host: "0.0.0.0"
+    
+  # CAST Imaging configuration  
+  imaging:
+    apiUrl: "https://console-gateway-service.cotsusc1dev.solutions.corelogic.com"
+    pageSize: 1000
+    displayPageSize: 20
+    code: "False"
+    
+  # Logging configuration
+  logging:
+    level: "INFO"
+    format: "json"
+
+# Host configuration - pointing to internal service
+hostControlPanel: "console-control-panel.platform-services-glb-castaip.svc.cluster.local"
+portControlPanel: 8098
+
+# Environment variables 
+env:
+  - name: LOG_FILE_PATH
+    value: "/app/storage/logs/mcp_img.log"
+
+# Security context 
+podSecurityContext:
+  fsGroup: 0
+  runAsUser: 0
+  runAsGroup: 0
+  runAsNonRoot: false
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: false
+  runAsUser: 0
+  capabilities:
+    drop:
+    - ALL
+
+# Health checks configuration
+livenessProbe:
+  httpGet: null
+  tcpSocket:
+    port: 8282
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet: null
+  tcpSocket:
+    port: 8282
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet: null
+  tcpSocket:
+    port: 8282
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+# Network policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: "istio-system"
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 443
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+# Pod disruption budget for availability
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Additional labels
+podLabels:
+  app.kubernetes.io/name: "cast-imaging-mcp-server"
+  app.kubernetes.io/version: "3.4.3"
+  app.kubernetes.io/component: "mcp-server"
+  app.kubernetes.io/part-of: "cast-imaging"
+  environment: "corelogic-dev"
+
+# Additional annotations
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8282"
+  prometheus.io/path: "/metrics"
+
+# Persistent storage - Single PVC for all storage needs
+persistence:
+  storage:
+    enabled: true
+    accessMode: ReadWriteOnce
+    size: 3Gi
+    storageClass: "standard-rwo"
+    mountPath: /app/storage
+    
+  # Disable separate logs and data PVCs
+  logs:
+    enabled: false
+    
+  data:
+    enabled: false
+
+# Deployment strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
