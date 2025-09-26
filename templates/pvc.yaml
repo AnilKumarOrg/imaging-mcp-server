@@ -27,7 +27,7 @@ TEMPLATE VARIABLES:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "cast-imaging-mcp.fullname" . }}-storage
+  name: {{ .Values.persistence.name | default "imaging-mcp-server-pvc" }}
   labels:
     {{- include "cast-imaging-mcp.labels" . | nindent 4 }}
     component: storage

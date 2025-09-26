@@ -41,7 +41,7 @@ spec:
   type: {{ .Values.service.type }}     # Service type (ClusterIP, NodePort, LoadBalancer)
   ports:
     - port: {{ .Values.service.port }} # Port exposed by the service (external)
-      targetPort: http               # Target port on the container (maps to containerPort named "http")
+      targetPort: {{ .Values.service.targetPort | default 8282 }} # Target port on the container
       protocol: TCP                  # Network protocol
       name: http                     # Port name for reference
   selector:                          # Label selector to identify target pods

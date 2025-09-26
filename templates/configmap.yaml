@@ -1,14 +1,61 @@
+{{/*
+==========================================================================
+CAST Imaging MCP Server - Configuration Template
+==========================================================================
+This template creates a Kubernetes ConfigMap containing the application 
+configuration for the CAST Imaging MCP Server.
+
+The ConfigMap provides environment-specific settings that are mounted as
+a configuration file into the container at runtime, enabling the MCP server
+to connect to CAST Imaging services and configure its behavior.
+
+Key Configuration Parameters:
+
+1. CAST Imaging Service Discovery:
+   - HOST_CONTROL_PANEL: Hostname of the CAST Imaging Eureka service
+   - PORT_CONTROL_PANEL: Port number for the Eureka service (typically 8098)
+   
+2. API Behavior Settings:
+   - IMAGING_PAGE_SIZE: Number of items per API response page (default: 1000)
+   - IMAGING_DISPLAY_PAGE_SIZE: Items shown in UI displays (default: 20)
+   - IMAGING_CODE: Enable/disable code analysis features ("True"/"False")
+
+3. Security Settings:
+   - HTTPS_ENABLED: Enable HTTPS with nginx SSL proxy ("true"/"false")
+   
+Template Variables Used:
+- .Values.hostControlPanel: CAST Imaging service hostname (REQUIRED)
+- .Values.portControlPanel: CAST Imaging service port (REQUIRED)
+- .Values.config.imaging.*: API behavior configuration
+- .Values.tls.enabled: TLS/HTTPS configuration
+
+File Mount Location:
+The configuration is mounted in the container at:
+/app/server/config/app.config
+
+Critical Notes:
+- hostControlPanel and portControlPanel MUST be correctly configured
+- These values must point to accessible CAST Imaging services
+- Port 8098 is typically the Eureka service discovery port
+- The MCP server will fail to start if it cannot reach these services
+==========================================================================
+*/}}
 {{- if .Values.config }}
-apiVersion: v1
-kind: ConfigMap
+apiVersion: v1                           # Kubernetes API version for ConfigMaps
+kind: ConfigMap                          # Resource type: ConfigMap
 metadata:
-  name: {{ include "cast-imaging-mcp.fullname" . }}-config
+  name: {{ include "cast-imaging-mcp.fullname" . }}-config  # ConfigMap name
   labels:
-    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}
+    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}  # Standard labels
 data:
-  app.config: |
+  app.config: |                         # Configuration file content
+    # CAST Imaging Service Discovery Configuration
+    # These settings control how the MCP server connects to CAST Imaging services
     HOST_CONTROL_PANEL="{{ .Values.hostControlPanel | default "host" }}"
     PORT_CONTROL_PANEL={{ .Values.portControlPanel | default .Values.config.server.port | default 8282 }}
+    
+    # CAST Imaging API Configuration
+    # These settings control API behavior and response formatting
     IMAGING_PAGE_SIZE={{ .Values.config.imaging.pageSize | default 1000 }}
     IMAGING_DISPLAY_PAGE_SIZE={{ .Values.config.imaging.displayPageSize | default 20 }}
     IMAGING_CODE={{ .Values.config.imaging.code | default "False" }}

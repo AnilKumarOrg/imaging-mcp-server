@@ -1,0 +1,61 @@
+{{/*
+==========================================================================
+CAST Imaging MCP Server - Istio VirtualService Template  
+==========================================================================
+This template creates an Istio VirtualService to enable external access to the
+CAST Imaging MCP Server through the Istio service mesh.
+
+VirtualService provides advanced traffic management capabilities including:
+- Host-based routing (DNS name routing)
+- Path-based routing (specific to /mcp endpoint) 
+- Integration with Istio Gateway for external traffic
+- SSL termination and certificate management (handled by Gateway)
+- Traffic splitting and canary deployments (if needed)
+
+Template Variables Used:
+- .Values.virtualService.enabled: Enable/disable VirtualService creation
+- .Values.virtualService.hosts: List of hostnames for external access
+- .Values.virtualService.gateways: List of Istio gateways to use
+- .Values.service.port: Target service port (should match service)
+
+Prerequisites:
+- Istio service mesh must be installed and configured
+- Istio Gateway must exist and be configured with the specified name
+- DNS must resolve the specified hosts to the Istio ingress gateway
+
+External Access:
+When configured correctly, the MCP server will be accessible at:
+https://<hostname>/mcp (HTTPS provided by Istio Gateway)
+
+Example URLs:
+- https://mcp.your-domain.com/mcp
+- https://imaging-mcp.company.com/mcp
+==========================================================================
+*/}}
+{{- if .Values.virtualService.enabled -}}
+apiVersion: networking.istio.io/v1beta1  # Istio VirtualService API version
+kind: VirtualService                      # Resource type: Istio VirtualService
+metadata:
+  name: {{ include "cast-imaging-mcp.fullname" . }}  # VirtualService name
+  namespace: {{ .Release.Namespace }}     # Namespace (must match service namespace)
+  labels:
+    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}  # Standard labels
+spec:
+  hosts:                                  # External hostnames for this VirtualService
+  {{- range .Values.virtualService.hosts }}
+  - {{ . }}                             # Each hostname configured in values
+  {{- end }}
+  gateways:                              # Istio gateways that handle external traffic
+  {{- range .Values.virtualService.gateways }}
+  - {{ . }}                             # Gateway reference (namespace/name format)
+  {{- end }}
+  http:                                  # HTTP routing rules
+  - match:                              # Match conditions for routing
+    - uri:
+        prefix: "/mcp"                  # Route only /mcp path (MCP endpoint)
+    route:                              # Routing destination
+    - destination:
+        host: {{ include "cast-imaging-mcp.fullname" . }}  # Target service name
+        port:
+          number: {{ .Values.service.port | default 8282 }}  # Target service port
+{{- end }}

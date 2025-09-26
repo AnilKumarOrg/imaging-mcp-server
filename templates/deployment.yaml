@@ -6,19 +6,27 @@ This template creates a Kubernetes Deployment for the CAST Imaging MCP Server.
 A Deployment manages a set of replica pods and ensures they are running and healthy.
 
 Key Features:
-- Rolling updates for zero-downtime deployments
-- Configurable replica count and autoscaling
-- Health checks and restart policies
-- Persistent storage mounting
-- Environment-specific configuration injection
+- Rolling updates for zero-downtime deployments  
+- Configurable replica count and autoscaling support
+- TCP-based health checks (readiness, liveness, startup probes)
+- Persistent storage mounting for logs and data
+- Environment-specific configuration injection via ConfigMap
 - Security contexts and resource management
+- Init container for storage directory setup
 
 Template Variables Used:
-- .Values.replicaCount: Number of pod replicas
+- .Values.replicaCount: Number of pod replicas (default: 1)
 - .Values.image: Container image configuration
-- .Values.persistence: Storage volume configuration
+- .Values.persistence: Storage volume configuration  
 - .Values.resources: CPU/memory limits and requests
-- .Values.securityContext: Security settings
+- .Values.env: Environment variables
+- .Values.config: Application configuration settings
+
+Health Check Strategy:
+- Uses TCP socket probes instead of HTTP (more reliable for MCP protocol)
+- Startup probe: 10s initial delay, 30 failures allowed (5 min startup time)
+- Readiness probe: 5s delay, checks every 5s
+- Liveness probe: 30s delay, checks every 10s
 ==========================================================================
 */}}
 
@@ -52,7 +60,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:                 # Pod-level security context
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml (.Values.podSecurityContext | default (dict "fsGroup" 0 "runAsUser" 0 "runAsGroup" 0 "runAsNonRoot" false)) | nindent 8 }}
       {{- if .Values.persistence.enabled }}
       initContainers:                  # Init containers run before main containers
         - name: storage-init           # Storage initialization container
@@ -65,9 +73,9 @@ spec:
       containers:                      # Main application containers
         - name: castimaging-mcp-server # Main container name
           securityContext:             # Container-level security context
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"  # Container image with tag
-          imagePullPolicy: {{ .Values.image.pullPolicy }}  # When to pull the image
+            {{- toYaml (.Values.securityContext | default (dict "allowPrivilegeEscalation" false "runAsNonRoot" false "runAsUser" 0 "capabilities" (dict "drop" (list "ALL")))) | nindent 12 }}
+          image: "{{ .Values.image.repository | default "castimaging/imaging-mcp-server" }}:{{ .Values.image.tag | default .Chart.AppVersion }}"  # Container image with tag
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}  # When to pull the image
           {{- if .Values.command }}
           command:                     # Override container entrypoint if specified
             {{- toYaml .Values.command | nindent 12 }}
@@ -89,13 +97,11 @@ spec:
             {{- toYaml .Values.envFrom | nindent 12 }}
           {{- end }}
           livenessProbe:             # Health check to determine if container is alive
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
+            {{- toYaml (.Values.livenessProbe | default (dict "tcpSocket" (dict "port" 8282) "initialDelaySeconds" 30 "periodSeconds" 10 "timeoutSeconds" 5 "failureThreshold" 3)) | nindent 12 }}
           readinessProbe:            # Health check to determine if container is ready for traffic
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
-          {{- if .Values.startupProbe }}
+            {{- toYaml (.Values.readinessProbe | default (dict "tcpSocket" (dict "port" 8282) "initialDelaySeconds" 5 "periodSeconds" 5 "timeoutSeconds" 3 "failureThreshold" 3)) | nindent 12 }}
           startupProbe:              # Health check for slow-starting containers
-            {{- toYaml .Values.startupProbe | nindent 12 }}
-          {{- end }}
+            {{- toYaml (.Values.startupProbe | default (dict "tcpSocket" (dict "port" 8282) "initialDelaySeconds" 10 "periodSeconds" 10 "timeoutSeconds" 5 "failureThreshold" 30)) | nindent 12 }}
           resources:                 # CPU and memory resource limits/requests
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:              # Volumes mounted in the container
@@ -118,7 +124,7 @@ spec:
         {{- if .Values.persistence.enabled }}
         - name: app-storage          # Consolidated storage volume
           persistentVolumeClaim:     # References a PVC
-            claimName: {{ include "cast-imaging-mcp.fullname" . }}-storage  # PVC name
+            claimName: imaging-mcp-server-pvc  # PVC name
         {{- end }}
         {{- if .Values.config }}
         - name: app-config           # Configuration volume

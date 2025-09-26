@@ -2,19 +2,30 @@
 
 ## Overview
 
-This Helm chart enables easy deployment and management of the CAST Imaging MCP server on Kubernetes clusters, with support for persistent storage, security contexts, and external access.
+This Helm chart enables easy deployment and management of the CAST Imaging MCP (Model Context Protocol) server on Kubernetes clusters. The MCP server provides AI-powered access to CAST Imaging insights through a standardized protocol, enabling integration with AI tools and applications.
+
+**Current Status**: ✅ **Fully Functional** - Chart version 1.1.0 with application version 3.4.4
+
+## What is MCP Server?
+
+The CAST Imaging MCP Server is a bridge between AI applications and CAST Imaging platform that:
+
+- Exposes CAST Imaging data through Model Context Protocol (MCP)
+- Provides access to applications, quality insights, security vulnerabilities, and architectural data
+- Enables AI assistants to analyze software architecture and quality
+- Supports real-time queries about software dependencies and structural flaws
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Installation](#installation)
-3. [Configuration](#configuration)
-4. [Deployment Examples](#deployment-examples)
-5. [Storage Management](#storage-management)
-6. [External Access](#external-access)
-7. [Monitoring and Health](#monitoring-and-health)
-8. [Troubleshooting](#troubleshooting)
-9. [Upgrading](#upgrading)
+2. [Quick Start](#quick-start)
+3. [Configuration Guide](#configuration-guide)
+4. [External Access Options](#external-access-options)
+5. [Deployment Examples](#deployment-examples)
+6. [Monitoring and Health](#monitoring-and-health)
+7. [Troubleshooting](#troubleshooting)
+8. [Upgrading](#upgrading)
+9. [Advanced Configuration](#advanced-configuration)
 10. [Uninstallation](#uninstallation)
 
 ## Prerequisites
@@ -27,289 +38,331 @@ This Helm chart enables easy deployment and management of the CAST Imaging MCP s
 
 ### Cluster Requirements
 
-- **Storage**: Support for PersistentVolumes with ReadWriteOnce access mode
-- **CPU**: Minimum 500m per pod
-- **Memory**: Minimum 1Gi per pod
-- **Storage**: Minimum 2Gi for persistent data
+- **CPU**: Minimum 200m per pod, recommended 1000m
+- **Memory**: Minimum 512Mi per pod, recommended 2Gi
+- **Storage**: Minimum 3Gi for persistent data and logs
+- **Network**: Access to CAST Imaging services (console-control-panel)
+
+### CAST Imaging Requirements
+
+- **CAST Imaging Platform**: Running and accessible
+- **Service Discovery**: IP address/hostname/FQDN of the machine on which the "imaging-services" component is installed (console-control-panel) available
+- **Network Access**: Kubernetes cluster can reach CAST Imaging services
 
 ### Optional Components
 
-- **Istio Service Mesh**: For advanced external access and traffic management
-- **Ingress Controller**: Alternative to Istio for external access
+- **Istio Service Mesh**: For VirtualService-based external access
+- **NGINX Ingress Controller**: Alternative for external access
+- **Cert-Manager**: For automatic TLS certificate management
 
-## Installation
+## Quick Start
 
-### Quick Start
+### 1. Basic Installation
 
-1. **Install from Local Chart** (recommended for current deployment):
-
-   ```bash
-   # Navigate to the chart directory
-   cd cast-imaging-mcp
-
-   # Install with default configuration
-   helm install imaging-mcp-server .
-   ```
-2. **Install with Custom Configuration**:
-
-   ```bash
-   helm install imaging-mcp-server . -f values-custom.yaml
-   ```
-
-## Configuration
-
-### Core Configuration Values
-
-The chart supports extensive configuration through values. Here are the key sections:
-
-#### Application Configuration
-
-```yaml
-# Basic application settings
-image:
-  repository: castsoftware/imaging-mcp-server
-  tag: "3.4.3"
-  pullPolicy: IfNotPresent
-
-# Service configuration  
-service:
-  type: ClusterIP
-  port: 8282
-  targetPort: 8282
-
-# Name overrides
-nameOverride: ""
-fullnameOverride: "imaging-mcp-server"
-```
-
-#### Resource Management
-
-```yaml
-resources:
-  limits:
-    cpu: 1000m
-    memory: 2Gi
-  requests:
-    cpu: 500m
-    memory: 1Gi
-```
-
-#### Security Context
-
-```yaml
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 65534
-  runAsGroup: 65534
-  fsGroup: 65534
-
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 65534
-```
-
-#### Persistence Configuration
-
-```yaml
-persistence:
-  enabled: true
-  storageClassName: "standard-rwo"
-  accessMode: ReadWriteOnce
-  size: 5Gi
-```
-
-**Note**: The chart now uses a simplified single PVC approach with an init container that creates organized subdirectories for different data types. This provides better resource utilization and easier management compared to separate PVCs.
-
-### Chart Optimizations (v1.1.0-beta1)
-
-This version of the chart has been optimized for better security and simplicity:
-
-#### **Simplified Storage:**
-
-- **Single PVC**: Consolidated from multiple PVC options to a single 5Gi PVC with organized subdirectories
-- **Init Container**: Automatically creates required directory structure (`/app/storage/data/` and `/app/storage/logs/`)
-- **Better Resource Utilization**: Single storage allocation instead of multiple smaller PVCs
-
-#### **Deployed Resources:**
-
-The chart now creates exactly **4 Kubernetes resources**:
-
-1. **Deployment**: Manages the MCP server pod
-2. **Service**: Exposes the application on port 8282
-3. **PersistentVolumeClaim**: Single Gi storage volume
-4. **ReplicaSet**: Created automatically by the Deployment
-
-### Environment-Specific Values Files
-
-#### values-gcp-customername.yaml
-
-Optimized for customer GCP environment with:
-
-- Single PVC storage configuration
-- Specific naming for service discovery
-- Integration with existing VirtualService
-- GCP-optimized storage classes
-
-#### values-development.yaml (example)
-
-```yaml
-image:
-  tag: latest
-  pullPolicy: Always
-
-persistence:
-  enabled: false
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 512Mi
-  limits:
-    cpu: 500m
-    memory: 1Gi
-
-# Enable debug logging
-env:
-  - name: LOG_LEVEL
-    value: "DEBUG"
-```
-
-## Deployment Examples
-
-### Basic Development Deployment
+The fastest way to get MCP server running:
 
 ```bash
-# Create namespace
-kubectl create namespace mcp-dev
+# Clone or navigate to the chart directory
+cd cast-imaging-mcp-server
 
-# Deploy with minimal resources
-helm install mcp-dev . \
-  --namespace mcp-dev \
-  --set persistence.enabled=false \
-  --set resources.requests.cpu=100m \
-  --set resources.requests.memory=512Mi
+# Install with default values (internal access only)
+helm install imaging-mcp-server . --namespace mcp-server --create-namespace
 ```
 
-## Storage Management
+### 2. Installation with External Access
 
-### Single PVC Approach (Current Implementation)
+For external access with Istio VirtualService:
 
-The chart uses a consolidated storage approach with a single PVC and organized subdirectories:
+```bash
+# Install with external access enabled
+helm install imaging-mcp-server . \
+  --namespace mcp-server \
+  --create-namespace \
+  --set virtualService.enabled=true \
+  --set virtualService.hosts='{mcp.your-domain.com}' \
+  --set virtualService.gateways='{your-gateway-name}'
+```
+
+### 3. Verify Installation
+
+```bash
+# Check deployment status
+kubectl get pods -n mcp-server
+
+# View logs to confirm startup
+kubectl logs -f deployment/imaging-mcp-server -n mcp-server
+
+# Test connectivity (port-forward for local testing)
+kubectl port-forward service/imaging-mcp-server 8282:8282 -n mcp-server
+```
+
+The server will be accessible at `http://localhost:8282/mcp` when using port-forward.
+
+## Configuration Guide
+
+### Essential Configuration Values
+
+The chart uses a single `values.yaml` file with well-organized sections:
+
+#### 1. Service Discovery (REQUIRED)
+
+```yaml
+# REQUIRED: Configure connection to CAST Imaging services
+hostControlPanel: console-control-panel.castimagingv3.svc.cluster.local
+portControlPanel: 8098
+```
+
+**Important**: These values MUST match your CAST Imaging environment:
+
+- `hostControlPanel`: Control Panel service discovery endpoint
+- `portControlPanel`: Port for Control Panel service (typically 8098)
+
+#### 2. Container Image Configuration
+
+```yaml
+image:
+  repository: "castimaging/imaging-mcp-server"
+  tag: "3.4.4"                    # Latest stable version
+  pullPolicy: "IfNotPresent"
+```
+
+#### 3. Resource Management
+
+```yaml
+resources:
+  requests:
+    cpu: 200m        # Minimum guaranteed CPU
+    memory: 512Mi    # Minimum guaranteed memory
+  limits:
+    cpu: 1000m       # Maximum allowed CPU
+    memory: 2Gi      # Maximum allowed memory
+```
+
+#### 4. Storage Configuration
 
 ```yaml
 persistence:
+  enabled: true                          # Enable persistent storage
+  name: "imaging-mcp-server-pvc"        # PVC name (customize for multiple deployments)
+  size: 3Gi                             # Storage size
+  storageClass: "standard-rwo"          # Storage class (cloud-provider specific)
+  accessMode: ReadWriteOnce             # Access mode
+```
+
+**Storage Classes by Cloud Provider:**
+
+- **GCP**: `standard-rwo` (HDD) or `premium-rwo` (SSD)
+- **AWS**: `gp2` or `gp3`
+- **Azure**: `default` or `managed-premium`
+
+#### 5. Application Settings
+
+```yaml
+config:
+  imaging:
+    pageSize: 1000              # API response page size
+    displayPageSize: 20         # UI display page size
+    code: "False"              # Enable code analysis features
+  server:
+    port: 8282                 # MCP server port
+```
+
+### External Access Options
+
+The chart supports multiple ways to expose the MCP server externally:
+
+### Option 1: Istio VirtualService
+
+Best for environments with Istio service mesh:
+
+```yaml
+# In values.yaml
+virtualService:
   enabled: true
-  size: 5Gi
-  storageClassName: "standard-rwo"
-```
-
-**Storage Structure:**
-
-```
-/app/storage/
-├── data/          # Application data
-├── logs/          # Application logs
-└── lost+found/    # File system recovery
-```
-
-### Storage Class Examples
-
-#### Google Cloud Platform
-
-```yaml
-persistence:
-  storageClassName: "standard-rwo"    # Standard persistent disk
-  # or "premium-rwo" for SSD performance
-```
-
-#### Amazon EKS
-
-```yaml
-persistence:
-  storageClassName: "gp2"             # General purpose SSD
-  # or "gp3" for latest generation
-```
-
-#### Azure AKS
-
-```yaml
-persistence:
-  storageClassName: "default"         # Standard managed disk
-  # or "managed-premium" for premium SSD
-```
-
-## External Access
-
-### Using Istio VirtualService
-
-If you have Istio service mesh installed, you can use VirtualService for external access:
-
-```yaml
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: imaging-mcp-server
-  namespace: cast-imaging-mcp-server
-spec:
   hosts:
-  - mcp-server.your-domain.com
-  http:
-  - match:
-    - uri:
-        prefix: /mcp
-    route:
-    - destination:
-        host: mcp-server.your-domain.com
-        port:
-          number: 8282
+    - "mcp.your-domain.com"
+  gateways:
+    - "istio-system/main-gateway"     # Your Istio gateway
 ```
 
-### Using Kubernetes Ingress
+**Deployment:**
 
-For standard ingress controllers:
+```bash
+helm install imaging-mcp-server . \
+  --set virtualService.enabled=true \
+  --set virtualService.hosts='{mcp.your-domain.com}' \
+  --set virtualService.gateways='{istio-system/main-gateway}'
+```
+
+**Access URL:** `https://mcp.your-domain.com/mcp`
+
+### Option 2: NGINX Ingress Controller
+
+For standard Kubernetes ingress:
+
+#### Step 1: Create Ingress Template
+
+Create `templates/ingress.yaml`:
 
 ```yaml
+{{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: imaging-mcp-server
+  name: {{ include "cast-imaging-mcp.fullname" . }}
+  labels:
+    {{- include "cast-imaging-mcp.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "cast-imaging-mcp.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+```
+
+#### Step 2: Configure Ingress in values.yaml
+
+Add to your `values.yaml`:
+
+```yaml
+# NGINX Ingress Configuration
+ingress:
+  enabled: true                              # Enable ingress
+  className: "nginx"                         # Ingress class
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-spec:
-  rules:
-  - host: mcp-server.your-domain.com
-    http:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Optional: Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit-connections: "10"
+    nginx.ingress.kubernetes.io/rate-limit-requests-per-minute: "60"
+  hosts:
+    - host: mcp.your-domain.com
       paths:
-      - path: /mcp
-        pathType: Prefix
-        backend:
-          service:
-            name: imaging-mcp-server
-            port:
-              number: 8282
+        - path: /mcp
+          pathType: Prefix
+  tls:
+    - secretName: mcp-tls-secret            # TLS certificate secret
+      hosts:
+        - mcp.your-domain.com
+
+# Disable VirtualService when using Ingress
+virtualService:
+  enabled: false
 ```
 
-### Port Forwarding for Development
-
-For local development and testing:
+#### Step 3: Deploy with Ingress
 
 ```bash
-# Forward local port 8282 to service
-kubectl port-forward service/imaging-mcp-server 8282:8282
-
-# Access at http://localhost:8282
+# Install with NGINX ingress
+helm install imaging-mcp-server . \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=mcp.your-domain.com \
+  --set ingress.hosts[0].paths[0].path=/mcp \
+  --set ingress.hosts[0].paths[0].pathType=Prefix \
+  --set virtualService.enabled=false
 ```
 
-## Monitoring and Health
+#### Step 4: Set up TLS Certificate
+
+**Option A: Manual Certificate**
+
+```bash
+# Create TLS secret with your certificate
+kubectl create secret tls mcp-tls-secret \
+  --cert=mcp.crt \
+  --key=mcp.key \
+  --namespace mcp-server
+```
+
+**Option B: Cert-Manager (Automatic)**
+
+Add annotations for cert-manager:
+
+```yaml
+ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+```
+
+### Option 3: LoadBalancer Service
+
+For cloud environments with load balancer support:
+
+```yaml
+# In values.yaml
+service:
+  type: LoadBalancer                        # Change from ClusterIP
+  port: 8282
+  targetPort: 8282
+  # Optional: Specify load balancer IP
+  # loadBalancerIP: "1.2.3.4"
+```
+
+**Note**: LoadBalancer service will expose the service directly without hostname-based routing.
+
+### Option 4: NodePort Service
+
+For on-premises or development environments:
+
+```yaml
+service:
+  type: NodePort
+  port: 8282
+  targetPort: 8282
+  nodePort: 32282                          # Optional: specify port (30000-32767)
+```
+
+Access via any cluster node: `http://node-ip:32282/mcp`
+
+## Deployment Examples
+
+### Example :
+
+```bash
+# Production deployment with HA
+helm install mcp-prod . \
+  --namespace mcp-production \
+  --create-namespace \
+  --set replicaCount=1 \
+  --set resources.requests.cpu=500m \
+  --set resources.requests.memory=1Gi \
+  --set persistence.size=10Gi \
+  --set virtualService.enabled=true \
+  --set virtualService.hosts='{mcp.company.com}'
+```
+
+### Monitoring and Health
 
 ### Health Checks
 
-The deployment includes comprehensive health checks:
+The deployment includes comprehensive health checks using TCP probes:
 
 #### Readiness Probe
 
@@ -317,10 +370,10 @@ The deployment includes comprehensive health checks:
 readinessProbe:
   tcpSocket:
     port: 8282
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
+  initialDelaySeconds: 5          # Wait 5s before first check
+  periodSeconds: 5                # Check every 5s
+  timeoutSeconds: 3               # 3s timeout
+  failureThreshold: 3             # Fail after 3 consecutive failures
 ```
 
 #### Liveness Probe
@@ -329,63 +382,108 @@ readinessProbe:
 livenessProbe:
   tcpSocket:
     port: 8282
-  initialDelaySeconds: 30
-  periodSeconds: 30
-  timeoutSeconds: 5
-  failureThreshold: 3
+  initialDelaySeconds: 30         # Wait 30s before first check
+  periodSeconds: 10               # Check every 10s
+  timeoutSeconds: 5               # 5s timeout
+  failureThreshold: 3             # Restart after 3 consecutive failures
+```
+
+#### Startup Probe
+
+```yaml
+startupProbe:
+  tcpSocket:
+    port: 8282
+  initialDelaySeconds: 10         # Wait 10s before first check
+  periodSeconds: 10               # Check every 10s
+  failureThreshold: 30            # Allow 5 minutes for startup
 ```
 
 ### Monitoring Commands
 
-#### Check Pod Status
+#### Check Deployment Status
 
 ```bash
-# View pod status
-kubectl get pods -l app.kubernetes.io/name=cast-imaging-mcp
+# Overall status
+kubectl get all -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
 
-# Describe pod for detailed status
-kubectl describe pod -l app.kubernetes.io/name=cast-imaging-mcp
+# Detailed pod status
+kubectl describe pods -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
+
+# Check deployment rollout
+kubectl rollout status deployment/imaging-mcp-server -n mcp-server
 ```
 
 #### View Logs
 
 ```bash
-# View current logs
-kubectl logs -l app.kubernetes.io/name=cast-imaging-mcp
+# Current logs
+kubectl logs deployment/imaging-mcp-server -n mcp-server
 
 # Follow logs in real-time
-kubectl logs -l app.kubernetes.io/name=cast-imaging-mcp -f
+kubectl logs -f deployment/imaging-mcp-server -n mcp-server
 
-# View logs from specific container
-kubectl logs deployment/imaging-mcp-server -c mcp-server
+# View logs from all pods
+kubectl logs -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
+
+# View logs with timestamps
+kubectl logs deployment/imaging-mcp-server -n mcp-server --timestamps=true
+
+# View previous container logs (if pod restarted)
+kubectl logs deployment/imaging-mcp-server -n mcp-server --previous
 ```
 
-#### Check Resource Usage
+#### Resource Usage
 
 ```bash
-# View resource usage
-kubectl top pods -l app.kubernetes.io/name=cast-imaging-mcp
+# View resource usage (requires metrics-server)
+kubectl top pods -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
 
-# Detailed resource description
-kubectl describe deployment imaging-mcp-server
+# Describe deployment for resource limits
+kubectl describe deployment imaging-mcp-server -n mcp-server
 ```
 
 ### Service Health Verification
 
-#### Test Service Connectivity
+#### Test MCP Server Functionality
 
 ```bash
-# Test service connectivity from within cluster
-kubectl run test-pod --image=alpine --rm -it -- sh
-# Inside the pod:
-# wget -qO- imaging-mcp-server:8282 || echo "Connection failed"
+# Port forward for local testing
+kubectl port-forward service/imaging-mcp-server 8282:8282 -n mcp-server
+
+# Test MCP endpoint (in another terminal)
+curl -v http://localhost:8282/mcp
 ```
 
-#### External Health Check
+Expected response should include MCP protocol errors (405 Method Not Allowed for GET requests is normal).
+
+#### Internal Connectivity Test
 
 ```bash
- If using external access
-curl -I https://mcp-server.your-domain.com/mcp
+# Test from within cluster
+kubectl run test-pod --image=busybox --rm -it --restart=Never -n mcp-server -- sh
+
+# Inside the pod:
+wget -qO- imaging-mcp-server:8282/mcp || echo "Connection test complete"
+```
+
+### Application Logs Analysis
+
+The MCP server provides detailed logs. Key log patterns to monitor:
+
+#### Successful Startup
+
+```
+INFO     Starting MCP server 'imaging' with transport 'streamable-http' on http://0.0.0.0:8282/mcp
+INFO     Started server process [1]
+INFO     Application startup complete.
+INFO     Uvicorn running on http://0.0.0.0:8282
+```
+
+#### Successful API Calls
+
+```
+INFO     100.114.1.67:44568 - "POST /mcp HTTP/1.1" 200 OK
 ```
 
 ## Troubleshooting
@@ -397,12 +495,18 @@ curl -I https://mcp-server.your-domain.com/mcp
 **Symptoms:**
 
 ```bash
-kubectl get pods
-NAME                                    READY   STATUS    RESTARTS   AGE
-imaging-mcp-server-xxx                  0/1     Pending   0          5m
+kubectl get pods -n mcp-server
+NAME                                 READY   STATUS    RESTARTS   AGE
+imaging-mcp-server-xxx               0/1     Pending   0          5m
 ```
 
-**Possible Causes and Solutions:**
+**Diagnosis:**
+
+```bash
+kubectl describe pod imaging-mcp-server-xxx -n mcp-server
+```
+
+**Common Causes and Solutions:**
 
 **Insufficient Resources:**
 
@@ -410,459 +514,515 @@ imaging-mcp-server-xxx                  0/1     Pending   0          5m
 # Check node resources
 kubectl describe nodes
 
-# Solution: Reduce resource requests or add more nodes
-helm upgrade imaging-mcp-server ./cast-imaging-mcp \
+# Solution: Reduce resource requests
+helm upgrade imaging-mcp-server . \
   --set resources.requests.cpu=100m \
-  --set resources.requests.memory=512Mi
+  --set resources.requests.memory=256Mi
 ```
 
 **Storage Issues:**
 
 ```bash
 # Check PVC status
-kubectl get pvc
+kubectl get pvc -n mcp-server
 
-# Check available storage classes
+# Check storage classes
 kubectl get storageclass
 
-# Solution: Fix storage class or create PV manually
+# Solution: Use available storage class
+helm upgrade imaging-mcp-server . \
+  --set persistence.storageClass=standard
 ```
 
-#### 2. Container Failing to Start
+**Node Selector Issues:**
+
+```bash
+# Check node labels
+kubectl get nodes --show-labels
+
+# Solution: Remove node selectors or fix labels
+helm upgrade imaging-mcp-server . \
+  --set nodeSelector={}
+```
+
+#### 2. Container CrashLoopBackOff
 
 **Symptoms:**
 
 ```bash
-kubectl get pods
-NAME                                    READY   STATUS             RESTARTS   AGE
-imaging-mcp-server-xxx                  0/1     CrashLoopBackOff   3          5m
+kubectl get pods -n mcp-server
+NAME                                 READY   STATUS             RESTARTS   AGE
+imaging-mcp-server-xxx               0/1     CrashLoopBackOff   5          10m
 ```
 
-**Debugging Steps:**
+**Diagnosis:**
 
 ```bash
 # Check container logs
-kubectl logs imaging-mcp-server-xxx
+kubectl logs imaging-mcp-server-xxx -n mcp-server
 
-# Check events
-kubectl describe pod imaging-mcp-server-xxx
+# Check previous container logs
+kubectl logs imaging-mcp-server-xxx -n mcp-server --previous
 
-# Common solutions:
-# - Fix image tag
-# - Adjust security context
-# - Check volume mounts
+# Check pod events
+kubectl describe pod imaging-mcp-server-xxx -n mcp-server
 ```
 
-**Permission Issues:**
+**Common Solutions:**
+
+**Image Issues:**
 
 ```bash
-# Check if security context is preventing file access
-kubectl exec -it imaging-mcp-server-xxx -- ls -la /persistent-data
+# Verify image exists and is pullable
+docker pull castimaging/imaging-mcp-server:3.4.4
 
-# Solution: Adjust fsGroup or runAsUser
-helm upgrade imaging-mcp-server ./cast-imaging-mcp \
-  --set podSecurityContext.fsGroup=0
+# Solution: Use correct image tag
+helm upgrade imaging-mcp-server . \
+  --set image.tag=3.4.4
+```
+
+**Configuration Issues:**
+
+```bash
+# Check if CAST Imaging services are accessible
+kubectl exec -it imaging-mcp-server-xxx -n mcp-server -- nslookup console-control-panel.castimagingv3.svc.cluster.local
+
+# Solution: Fix service discovery configuration
+helm upgrade imaging-mcp-server . \
+  --set hostControlPanel=your-correct-hostname \
+  --set portControlPanel=8098
+```
+
+**Permissions Issues:**
+
+```bash
+# Solution: Adjust security context
+helm upgrade imaging-mcp-server . \
+  --set podSecurityContext.fsGroup=0 \
+  --set securityContext.runAsUser=0
 ```
 
 #### 3. Service Not Accessible
 
 **Symptoms:**
 
-- Service exists but cannot be reached
 - External access fails
+- Port forwarding doesn't work
+- Service exists but can't be reached
 
-**Debugging Steps:**
+**Diagnosis:**
 
 ```bash
 # Check service status
-kubectl get service imaging-mcp-server
+kubectl get service imaging-mcp-server -n mcp-server
 
 # Check endpoints
-kubectl get endpoints imaging-mcp-server
+kubectl get endpoints imaging-mcp-server -n mcp-server
 
-# Test service within cluster
-kubectl run debug --image=alpine --rm -it -- sh
-# wget -qO- imaging-mcp-server:8282
+# Check if pods are running and ready
+kubectl get pods -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
 ```
 
-**Common Solutions:**
+**Solutions:**
+
+**Service Selector Mismatch:**
 
 ```bash
 # Check service selector matches pod labels
-kubectl get pods --show-labels
-kubectl describe service imaging-mcp-server
+kubectl describe service imaging-mcp-server -n mcp-server
+kubectl get pods --show-labels -n mcp-server
 
-# Verify port configuration
-helm upgrade imaging-mcp-server ./cast-imaging-mcp \
+# Verify in values.yaml that selector labels are correct
+```
+
+**Port Configuration Issues:**
+
+```bash
+# Check if service ports match container ports
+kubectl describe deployment imaging-mcp-server -n mcp-server
+
+# Solution: Ensure port consistency
+helm upgrade imaging-mcp-server . \
   --set service.port=8282 \
   --set service.targetPort=8282
 ```
 
-#### 4. Persistence Issues
+#### 4. External Access Not Working
 
-**Storage Not Mounting:**
-
-```bash
-# Check PVC status
-kubectl get pvc
-
-# Check PV binding
-kubectl get pv
-
-# Describe PVC for events
-kubectl describe pvc cast-storage
-```
-
-**Data Not Persisting:**
+**For Istio VirtualService:**
 
 ```bash
-# Verify volume mounts
-kubectl describe pod imaging-mcp-server-xxx
+# Check if VirtualService is created
+kubectl get virtualservice -n mcp-server
 
-# Check if data is written to correct path
-kubectl exec -it imaging-mcp-server-xxx -- ls -la /app/storage
-```
-
-#### 5. External Access Issues
-
-**Istio VirtualService Not Working:**
-
-```bash
 # Check VirtualService configuration
-kubectl get virtualservice imaging-mcp-server -o yaml
+kubectl describe virtualservice imaging-mcp-server -n mcp-server
 
-# Check Istio gateway
-kubectl get gateway -A
+# Check if gateway exists
+kubectl get gateway -A | grep your-gateway-name
 
 # Test internal service first
-kubectl port-forward service/imaging-mcp-server 8282:8282
+kubectl port-forward service/imaging-mcp-server 8282:8282 -n mcp-server
 ```
 
-### Debug Commands Reference
+**For NGINX Ingress:**
 
-#### Comprehensive Status Check
+```bash
+# Check if ingress is created
+kubectl get ingress -n mcp-server
+
+# Check ingress status
+kubectl describe ingress imaging-mcp-server -n mcp-server
+
+# Check NGINX ingress controller logs
+kubectl logs -l app.kubernetes.io/name=ingress-nginx -n ingress-nginx
+
+# Verify DNS resolution
+nslookup mcp.your-domain.com
+```
+
+#### 5. MCP Protocol Errors
+
+**Symptoms:**
+
+- Client connections fail
+- Getting protocol-related errors
+
+**Common MCP Client Errors and Solutions:**
+
+**404 Status Sending Message:**
+
+```
+Client logs show "404 status sending message"
+```
+
+**Solution**: Verify the MCP endpoint URL includes `/mcp` path:
+
+- Correct: `https://mcp.your-domain.com/mcp`
+- Wrong: `https://mcp.your-domain.com/`
+
+**Connection Timeout:**
+
+```
+Client logs show connection timeouts
+```
+
+**Solution**: Check network connectivity and firewall rules.
+
+**Certificate Errors:**
+
+```
+TLS/SSL certificate verification failed
+```
+
+**Solution**: Ensure proper TLS certificate configuration in ingress/VirtualService.
+
+### Debug Commands Collection
+
+#### Comprehensive Status Check Script
+
+Create `debug-mcp.sh`:
 
 ```bash
 #!/bin/bash
-echo "=== CAST Imaging MCP Server Status ==="
+NAMESPACE=${1:-mcp-server}
+echo "=== CAST Imaging MCP Server Debug Info ==="
+echo "Namespace: $NAMESPACE"
 echo
 
 echo "1. Helm Release Status:"
-helm list -A | grep imaging-mcp-server
+helm list -n $NAMESPACE | grep imaging-mcp-server
+echo
 
-echo -e "\n2. Pod Status:"
-kubectl get pods -l app.kubernetes.io/name=cast-imaging-mcp -o wide
+echo "2. Pod Status:"
+kubectl get pods -l app.kubernetes.io/name=cast-imaging-mcp-server -n $NAMESPACE -o wide
+echo
 
-echo -e "\n3. Service Status:"
-kubectl get services -l app.kubernetes.io/name=cast-imaging-mcp
+echo "3. Deployment Status:"
+kubectl get deployment imaging-mcp-server -n $NAMESPACE
+echo
 
-echo -e "\n4. PVC Status:"
-kubectl get pvc -l app.kubernetes.io/name=cast-imaging-mcp
+echo "4. Service Status:"
+kubectl get service imaging-mcp-server -n $NAMESPACE
+echo
 
-echo -e "\n5. Recent Events:"
-kubectl get events --sort-by=.metadata.creationTimestamp | tail -10
+echo "5. Endpoints:"
+kubectl get endpoints imaging-mcp-server -n $NAMESPACE
+echo
 
-echo -e "\n6. Resource Usage:"
-kubectl top pods -l app.kubernetes.io/name=cast-imaging-mcp 2>/dev/null || echo "Metrics server not available"
+echo "6. PVC Status:"
+kubectl get pvc -n $NAMESPACE
+echo
+
+echo "7. Recent Events:"
+kubectl get events --sort-by=.metadata.creationTimestamp -n $NAMESPACE | tail -10
+echo
+
+echo "8. Resource Usage (if metrics available):"
+kubectl top pods -l app.kubernetes.io/name=cast-imaging-mcp-server -n $NAMESPACE 2>/dev/null || echo "Metrics not available"
+echo
+
+echo "9. VirtualService Status:"
+kubectl get virtualservice -n $NAMESPACE 2>/dev/null || echo "No VirtualService found"
+echo
+
+echo "10. Ingress Status:"
+kubectl get ingress -n $NAMESPACE 2>/dev/null || echo "No Ingress found"
+
+echo "=== Debug Info Complete ==="
+```
+
+**Usage:**
+
+```bash
+chmod +x debug-mcp.sh
+./debug-mcp.sh mcp-server
 ```
 
 #### Log Collection Script
 
+Create `collect-mcp-logs.sh`:
+
 ```bash
 #!/bin/bash
-NAMESPACE=${1:-default}
-OUTPUT_DIR="./mcp-server-logs-$(date +%Y%m%d-%H%M%S)"
+NAMESPACE=${1:-mcp-server}
+OUTPUT_DIR="mcp-logs-$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$OUTPUT_DIR"
+echo "Collecting MCP server diagnostics in: $OUTPUT_DIR"
 
-echo "Collecting CAST Imaging MCP Server diagnostics..."
+# Helm information
+helm get values imaging-mcp-server -n $NAMESPACE > "$OUTPUT_DIR/helm-values.yaml" 2>&1
+helm status imaging-mcp-server -n $NAMESPACE > "$OUTPUT_DIR/helm-status.txt" 2>&1
 
-# Helm status
-helm status imaging-mcp-server > "$OUTPUT_DIR/helm-status.txt" 2>&1
-
-# Pod information
-kubectl get pods -l app.kubernetes.io/name=cast-imaging-mcp -o yaml > "$OUTPUT_DIR/pods.yaml"
-kubectl describe pods -l app.kubernetes.io/name=cast-imaging-mcp > "$OUTPUT_DIR/pods-describe.txt"
-
-# Service information
-kubectl get services -l app.kubernetes.io/name=cast-imaging-mcp -o yaml > "$OUTPUT_DIR/services.yaml"
-
-# PVC information
-kubectl get pvc -l app.kubernetes.io/name=cast-imaging-mcp -o yaml > "$OUTPUT_DIR/pvc.yaml"
+# Kubernetes resources
+kubectl get all -l app.kubernetes.io/name=cast-imaging-mcp-server -n $NAMESPACE -o yaml > "$OUTPUT_DIR/k8s-resources.yaml"
+kubectl describe deployment imaging-mcp-server -n $NAMESPACE > "$OUTPUT_DIR/deployment-describe.txt" 2>&1
 
 # Logs
-kubectl logs -l app.kubernetes.io/name=cast-imaging-mcp --tail=1000 > "$OUTPUT_DIR/application-logs.txt" 2>&1
+kubectl logs -l app.kubernetes.io/name=cast-imaging-mcp-server -n $NAMESPACE --tail=1000 > "$OUTPUT_DIR/application.log" 2>&1
 
 # Events
-kubectl get events --sort-by=.metadata.creationTimestamp > "$OUTPUT_DIR/events.txt"
+kubectl get events --sort-by=.metadata.creationTimestamp -n $NAMESPACE > "$OUTPUT_DIR/events.txt"
+
+# Network
+kubectl get service,endpoints,ingress,virtualservice -n $NAMESPACE > "$OUTPUT_DIR/networking.txt" 2>&1
 
 echo "Diagnostics collected in: $OUTPUT_DIR"
+echo "Share this directory with support team if needed."
+```
+
+**Usage:**
+
+```bash
+chmod +x collect-mcp-logs.sh
+./collect-mcp-logs.sh mcp-server
 ```
 
 ## Upgrading
 
-### Upgrade Process
+### Before You Upgrade
 
-#### 1. Check Current Version
-
-```bash
-helm list
-helm get values imaging-mcp-server
-```
-
-#### 2. Backup Current Configuration
+1. **Backup Current Configuration:**
 
 ```bash
 # Export current values
-helm get values imaging-mcp-server > current-values.yaml
+helm get values imaging-mcp-server -n mcp-server > current-values.yaml
 
-# Backup persistent data (if applicable)
-kubectl exec deployment/imaging-mcp-server -- \
-  tar czf /tmp/pre-upgrade-backup.tar.gz /persistent-data
+# Backup persistent data (optional)
+kubectl exec deployment/imaging-mcp-server -n mcp-server -- \
+  tar czf /tmp/pre-upgrade-backup.tar.gz /app/storage
 ```
 
-#### 3. Perform Upgrade
-
-**Standard Upgrade:**
+2. **Check Compatibility:**
 
 ```bash
-helm upgrade imaging-mcp-server .
+# Check current version
+helm list -n mcp-server
+
+# Check image compatibility
+docker pull castimaging/imaging-mcp-server:3.4.4
 ```
 
-**Upgrade with New Values:**
+### Upgrade Process
+
+#### 1. Standard Upgrade
 
 ```bash
+# Navigate to chart directory
+cd cast-imaging-mcp-server
+
+# Upgrade with current values
+helm upgrade imaging-mcp-server . -n mcp-server
+```
+
+#### 2. Upgrade with New Configuration
+
+```bash
+# Upgrade with new values file
 helm upgrade imaging-mcp-server . \
-  -f values-gcp-customer.yaml \
-  --set image.tag=3.4.4
+  -n mcp-server \
+  -f values-new.yaml
+
+# Or upgrade with specific value changes
+helm upgrade imaging-mcp-server . \
+  -n mcp-server \
+  --set image.tag=3.4.4 \
+  --set persistence.size=5Gi
 ```
 
-**Upgrade with Wait and Timeout:**
+#### 3. Safe Upgrade with Rollback Protection
 
 ```bash
+# Upgrade with automatic rollback on failure
 helm upgrade imaging-mcp-server . \
+  -n mcp-server \
+  --atomic \
   --wait \
-  --timeout=10m \
-  --atomic  # Rollback on failure
+  --timeout=10m
 ```
 
-#### 4. Verify Upgrade
+#### 4. Preview Changes Before Upgrade
 
 ```bash
-# Check rollout status
-kubectl rollout status deployment/imaging-mcp-server
+# Dry run to see what would change
+helm upgrade imaging-mcp-server . \
+  -n mcp-server \
+  --dry-run \
+  --debug
+```
 
-# Verify functionality
-kubectl port-forward service/imaging-mcp-server 8282:8282
-# Test at http://localhost:8282
+### Monitor Upgrade Progress
+
+```bash
+# Watch rollout status
+kubectl rollout status deployment/imaging-mcp-server -n mcp-server
+
+# Monitor pods during upgrade
+kubectl get pods -w -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
+```
+
+### Verify Upgrade
+
+```bash
+# Check new version
+helm list -n mcp-server
+
+# Test functionality
+kubectl port-forward service/imaging-mcp-server 8282:8282 -n mcp-server
+# Test in browser: http://localhost:8282/mcp
+
+# Check logs for errors
+kubectl logs deployment/imaging-mcp-server -n mcp-server --tail=100
 ```
 
 ### Rollback if Needed
 
 ```bash
 # View rollout history
-helm history imaging-mcp-server
+helm history imaging-mcp-server -n mcp-server
 
 # Rollback to previous version
-helm rollback imaging-mcp-server
+helm rollback imaging-mcp-server -n mcp-server
 
 # Rollback to specific revision
-helm rollback imaging-mcp-server 2
+helm rollback imaging-mcp-server 5 -n mcp-server
 ```
 
-### Version-Specific Upgrade Notes
+### Uninstallation
 
-#### Upgrading from 1.0.x to 1.1.x
-
-- **Breaking Change**: Storage configuration unified to single PVC by default
-- **Action Required**: Review storage settings in values file
-- **Migration**: Data automatically preserved during upgrade
-
-#### Upgrading Image Versions
-
-```bash
-# Always verify image compatibility
-helm upgrade imaging-mcp-server . \
-  --set image.tag=3.4.4 \
-  --dry-run
-
-# Apply upgrade
-helm upgrade imaging-mcp-server . \
-  --set image.tag=3.4.4
-```
-
-## Uninstallation
-
-### Clean Uninstall Process
+### Complete Removal Process
 
 #### 1. Backup Data (Optional)
 
 ```bash
-# Create final backup
-kubectl exec deployment/imaging-mcp-server -- \
+# Create final backup of persistent data
+kubectl exec deployment/imaging-mcp-server -n mcp-server -- \
   tar czf /tmp/final-backup.tar.gz /app/storage
 
-kubectl cp platform-services-glb-castaip/imaging-mcp-server-xxx:/tmp/final-backup.tar.gz ./final-backup.tar.gz
+# Copy backup to local machine
+kubectl cp mcp-server/imaging-mcp-server-xxx:/tmp/final-backup.tar.gz ./final-backup.tar.gz
 ```
 
-#### 2. Remove Helm Release
+#### 2. Uninstall Helm Release
 
 ```bash
-# Standard uninstall
-helm uninstall imaging-mcp-server
-
-# Uninstall from specific namespace
-helm uninstall imaging-mcp-server --namespace mcp-server
+# Standard uninstall (keeps PVC)
+helm uninstall imaging-mcp-server -n mcp-server
 ```
 
-#### 3. Clean Up Persistent Volumes (if desired)
+#### 3. Remove Persistent Volumes (if desired)
 
 ```bash
 # List PVCs (these are NOT automatically deleted)
-kubectl get pvc
+kubectl get pvc -n mcp-server
 
-# Delete PVC to free storage
-kubectl delete pvc imaging-mcp-server-storage
+# Delete specific PVC
+kubectl delete pvc imaging-mcp-server-pvc -n mcp-server
 
-# Or delete all PVCs with the app label
-kubectl delete pvc -l app.kubernetes.io/name=cast-imaging-mcp
+# Or delete all PVCs in namespace
+kubectl delete pvc --all -n mcp-server
 ```
 
-#### 4. Clean Up Namespace (if dedicated)
+#### 4. Clean Up External Resources
 
 ```bash
-# If using dedicated namespace
+# Remove ingress (if created separately)
+kubectl delete ingress imaging-mcp-server -n mcp-server
+
+# Remove network policies (if created)
+kubectl delete networkpolicy -l app.kubernetes.io/name=cast-imaging-mcp-server -n mcp-server
+
+# Remove secrets (TLS certificates, etc.)
+kubectl delete secret mcp-tls-secret -n mcp-server
+```
+
+#### 5. Remove Namespace (if dedicated)
+
+```bash
+# If using dedicated namespace, remove everything at once
 kubectl delete namespace mcp-server
 ```
 
-#### 5. Verify Clean Removal
+#### 6. Verify Complete Removal
 
 ```bash
 # Check for remaining resources
-kubectl get all -l app.kubernetes.io/name=cast-imaging-mcp
-kubectl get pvc -l app.kubernetes.io/name=cast-imaging-mcp
+kubectl get all -l app.kubernetes.io/name=cast-imaging-mcp-server --all-namespaces
+kubectl get pvc -l app.kubernetes.io/name=cast-imaging-mcp-server --all-namespaces
 ```
 
-### Selective Cleanup
+### Selective Cleanup Options
 
 #### Keep Data, Remove Application
 
 ```bash
-# Uninstall but keep PVCs
-helm uninstall imaging-mcp-server
+# Remove application but keep storage for future use
+helm uninstall imaging-mcp-server -n mcp-server
 
-# PVC remains for future reinstallation
-kubectl get pvc  # Should still show imaging-mcp-server-storage
+# Verify PVC is retained
+kubectl get pvc -n mcp-server
 ```
 
-#### Remove Everything
+#### Remove Application, Keep Configuration
 
 ```bash
-# Complete removal including data
-helm uninstall imaging-mcp-server
-kubectl delete pvc -l app.kubernetes.io/name=cast-imaging-mcp
+# Export configuration before removal
+helm get values imaging-mcp-server -n mcp-server > backup-values.yaml
+
+# Remove application
+helm uninstall imaging-mcp-server -n mcp-server
+kubectl delete pvc --all -n mcp-server
+
+# Configuration can be reused later with:
+# helm install imaging-mcp-server . -f backup-values.yaml -n mcp-server
 ```
 
-## Advanced Configuration
+---
 
-### Multi-Environment Setup
+## Chart Information
 
-#### Directory Structure
-
-```
-environments/
-├── development/
-│   ├── values-dev.yaml
-│   └── secrets-dev.yaml
-├── staging/
-│   ├── values-staging.yaml
-│   └── secrets-staging.yaml
-└── production/
-    ├── values-prod.yaml
-    └── secrets-prod.yaml
-```
-
-#### Deployment Script
-
-```bash
-#!/bin/bash
-ENVIRONMENT=${1:-development}
-NAMESPACE="mcp-${ENVIRONMENT}"
-
-echo "Deploying to ${ENVIRONMENT} environment..."
-
-helm upgrade --install "mcp-${ENVIRONMENT}" . \
-  -f "environments/${ENVIRONMENT}/values-${ENVIRONMENT}.yaml" \
-  --namespace "${NAMESPACE}" \
-  --create-namespace \
-  --wait
-```
-
-### Security Hardening
-
-#### Enhanced Security Context
-
-```yaml
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 65534
-  runAsGroup: 65534
-  fsGroup: 65534
-  seccompProfile:
-    type: RuntimeDefault
-
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 65534
-  seccompProfile:
-    type: RuntimeDefault
-```
-
-#### Network Policies
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: imaging-mcp-server-netpol
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: cast-imaging-mcp
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: istio-system
-    ports:
-    - protocol: TCP
-      port: 8282
-  egress:
-  - to: []
-    ports:
-    - protocol: TCP
-      port: 443  # HTTPS outbound
-    - protocol: UDP
-      port: 53   # DNS
-```
-
-### Documentation Links
-
-- [CAST Imaging Official Documentation](https://doc.castsoftware.com/display/IMAGING)
-- [Model Context Protocol Specification](https://modelcontextprotocol.io/)
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [Helm Documentation](https://helm.sh/docs/)
-
-#### **Chart Version**: 1.1.0-beta1
-
-**Application Version**: 3.4.3
-**Last Updated**: September 18, 2025
-**Maintainer**: CAST Delivery Team
+- **Chart Name**: cast-imaging-mcp-server
+- **Chart Version**: 1.1.0
+- **Application Version**: 3.4.4
+- **Last Updated**: September 26, 2025
