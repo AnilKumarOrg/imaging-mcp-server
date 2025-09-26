@@ -1,0 +1,88 @@
+# ==========================================================================
+# DEPLOYMENT NAMING
+# ==========================================================================
+# Override the full resource name for shorter pod names
+fullnameOverride: "imaging-mcp-server"
+
+# ==========================================================================
+# REQUIRED: Service Discovery Configuration  
+# ==========================================================================
+# These MUST be configured for your environment
+hostControlPanel: console-control-panel.castimagingv3.svc.cluster.local  # CAST Imaging REST API
+portControlPanel: 8098                                                         # API server port
+
+# ==========================================================================
+# APPLICATION CONFIGURATION
+# ==========================================================================
+# CAST Imaging API settings
+config:
+  imaging:
+    pageSize: 1000                   # API response page size (default: 1000)
+    displayPageSize: 20              # UI display page size (default: 20)
+    code: "False"                    # Code analysis features
+  server:
+    port: 8282                       # MCP server port
+
+# ==========================================================================
+# CONTAINER CONFIGURATION
+# ==========================================================================
+# Container image settings
+image:
+  repository: "castimaging/imaging-mcp-server"  # Container image repository
+  tag: "3.4.4"                                 # MCP Server version
+  pullPolicy: "IfNotPresent"                   # Image pull policy
+
+# Deployment scaling
+replicaCount: 1                      # Number of pod replicas
+
+# Service configuration (must match VirtualService expectations)
+service:
+  type: ClusterIP                   # Service type for internal access
+  port: 8282                        # Port expected by VirtualService
+  targetPort: 8282                  # Container port for MCP server (use numeric)
+
+# ==========================================================================
+# ENVIRONMENT VARIABLES
+# ==========================================================================
+# Custom environment variables
+env:
+  - name: LOG_FILE_PATH              # Log file location
+    value: "/app/storage/logs/mcp_img.log"
+
+# Storage Configuration
+persistence:
+  enabled: true                      # Enable persistent storage (default: true)
+  name: "imaging-mcp-server-pvc"    # PVC name (change if deploying multiple instances)
+  size: 3Gi                         # Storage size (default: 3Gi)
+  storageClass: "standard-rwo"      # GCP storage class (modify for other clouds)
+  accessMode: ReadWriteOnce          # Storage access mode
+
+# ==========================================================================
+# OPTIONAL: External Access (Istio)
+# ==========================================================================
+# Only needed if exposing MCP server externally
+virtualService:
+  enabled: true                      # Set to true to enable external access
+  hosts:                            # Replace with your domain
+    - "imaging-mcp-server.customerdomain.com"
+  gateways:
+    - "asm-gateways/istio-gateway"  # Correct gateway used by other services
+
+# ==========================================================================
+# ADVANCED: Resource Limits (Optional)
+# ==========================================================================
+resources:
+  requests:
+    cpu: 200m                       # Minimum CPU (default: 200m)
+    memory: 512Mi                   # Minimum memory (default: 512Mi)
+  limits:
+    cpu: 1000m                      # Maximum CPU (default: 1000m)  
+    memory: 2Gi                     # Maximum memory (default: 2Gi)
+
+# Autoscaling (disabled by default)
+autoscaling:
+  enabled: false                    # Disable horizontal pod autoscaling
+
+# TLS configuration (disabled by default)  
+tls:
+  enabled: false                    # Disable TLS for internal communication
